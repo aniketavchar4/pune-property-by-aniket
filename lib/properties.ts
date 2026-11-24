@@ -1,0 +1,9 @@
+export type Property = { id: string; title: string; location: string; price: string; type: string; purpose: string; beds: string; area: string; image: string; tag?: string };
+export const properties: Property[] = [
+  { id: '1', title: 'Bright 2 BHK Apartment', location: 'Narhe, Pune', price: '₹ 72 Lakh', type: '2 BHK', purpose: 'Buy', beds: '2 Beds', area: '980 sq.ft.', image: 'https://images.unsplash.com/photo-1600607687939-ce8a6c25118c?auto=format&fit=crop&w=1000&q=85', tag: 'Featured' },
+  { id: '2', title: 'Modern 1 BHK Home', location: 'Katraj, Pune', price: '₹ 13,000 / month', type: '1 BHK', purpose: 'Rent', beds: '1 Bed', area: '620 sq.ft.', image: 'https://images.unsplash.com/photo-1600566753086-00f18fb6b3ea?auto=format&fit=crop&w=1000&q=85', tag: 'Popular' },
+  { id: '3', title: 'Residential Plot', location: 'Wagholi, Pune', price: '₹ 38 Lakh', type: 'Plot', purpose: 'Buy', beds: 'NA', area: '1,500 sq.ft.', image: 'https://images.unsplash.com/photo-1500382017468-9049fed747ef?auto=format&fit=crop&w=1000&q=85' },
+  { id: '4', title: 'Premium 3 BHK Residence', location: 'Baner, Pune', price: '₹ 1.45 Cr', type: '3 BHK+', purpose: 'Buy', beds: '3 Beds', area: '1,650 sq.ft.', image: 'https://images.unsplash.com/photo-1600607687920-4e2a09cf159d?auto=format&fit=crop&w=1000&q=85' },
+  { id: '5', title: 'Compact Studio Room', location: 'Dhayari, Pune', price: '₹ 7,500 / month', type: 'Room', purpose: 'Rent', beds: '1 Room', area: '300 sq.ft.', image: 'https://images.unsplash.com/photo-1616486338812-3dadae4b4ace?auto=format&fit=crop&w=1000&q=85' },
+  { id: '6', title: 'Road-facing Commercial Space', location: 'Dhankawadi, Pune', price: '₹ 28,000 / month', type: 'Commercial', purpose: 'Rent', beds: 'Shop', area: '450 sq.ft.', image: 'https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1000&q=85' }
+];
