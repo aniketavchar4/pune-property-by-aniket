@@ -1,3 +1,314 @@
+
 'use client';
-import { useState } from 'react';
-export default function AdminPage(){const [sent,setSent]=useState(false);return <main className="inner-page container"><p className="eyebrow">PROPERTY OWNER / ADMIN</p><h1 className="page-heading">Add a property listing.</h1><p className="section-sub">This is the listing form design preview. Admin protection, media uploads and saving listings will be added with Supabase.</p>{sent?<div className="form-card"><h2>Listing details captured in preview.</h2><p className="notice">No listing has been published or saved yet. Backend setup is required.</p></div>:<form className="form-card" onSubmit={e=>{e.preventDefault();setSent(true)}}><div className="form-grid"><label className="form-field">Listing title<input required placeholder="e.g. Spacious 2 BHK in Narhe"/></label><label className="form-field">Listing purpose<select><option>Sale</option><option>Rent</option><option>Lease</option></select></label><label className="form-field">Property category<select><option>Room</option><option>1RK</option><option>1 BHK</option><option>2 BHK</option><option>3 BHK+</option><option>Plot / Land</option><option>Shop / Commercial</option></select></label><label className="form-field">Price<input required placeholder="e.g. ₹65,00,000"/></label><label className="form-field">Location<input required placeholder="Area, Pune"/></label><label className="form-field">Area / size<input placeholder="e.g. 950 sq.ft."/></label><label className="form-field full">Description<textarea placeholder="Property details, amenities and nearby landmarks"/></label><label className="form-field full">Photos / video<input type="file" accept="image/*,video/*" multiple disabled/><small>Media upload becomes available after backend setup.</small></label></div><button className="form-submit" type="submit">Preview listing details</button></form>}</main>}
+
+import { useEffect, useState } from 'react';
+import type { FormEvent, ChangeEvent } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+
+const MAX_FILES = 8;
+const MAX_IMAGE_SIZE = 10 * 1024 * 1024;
+const MAX_VIDEO_SIZE = 50 * 1024 * 1024;
+
+export default function AdminPage() {
+  const router = useRouter();
+
+  const [userId, setUserId] = useState('');
+  const [checking, setChecking] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [message, setMessage] = useState('');
+  const [files, setFiles] = useState<File[]>([]);
+
+  useEffect(() => {
+    let active = true;
+
+    supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+
+      if (error || !data.user) {
+        router.replace('/login');
+        return;
+      }
+
+      setUserId(data.user.id);
+      setChecking(false);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [router]);
+
+  function selectFiles(e: ChangeEvent<HTMLInputElement>) {
+    const selected = Array.from(e.target.files || []);
+    setError('');
+
+    if (selected.length > MAX_FILES) {
+      setError('Please select a maximum of 8 photos/videos.');
+      e.target.value = '';
+      setFiles([]);
+      return;
+    }
+
+    const invalid = selected.find((file) => {
+      const image = file.type.startsWith('image/');
+      const video = file.type.startsWith('video/');
+
+      return (
+        (!image && !video) ||
+        (image && file.size > MAX_IMAGE_SIZE) ||
+        (video && file.size > MAX_VIDEO_SIZE)
+      );
+    });
+
+    if (invalid) {
+      setError('Photos must be 10 MB or less and videos 50 MB or less.');
+      e.target.value = '';
+      setFiles([]);
+      return;
+    }
+
+    setFiles(selected);
+  }
+
+  async function submitProperty(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+
+    const formElement = e.currentTarget;
+    const form = new FormData(formElement);
+
+    setError('');
+    setMessage('');
+
+    if (!userId) {
+      setError('Please log in before posting a property.');
+      return;
+    }
+
+    if (files.length === 0) {
+      setError('Please select at least one photo or video.');
+      return;
+    }
+
+    setBusy(true);
+    const uploadedPaths: string[] = [];
+
+    try {
+      const { data: authData, error: authError } =
+        await supabase.auth.getUser();
+
+      if (authError || !authData.user || authData.user.id !== userId) {
+        throw new Error('Your login session has expired. Please log in again.');
+      }
+
+      const purpose = String(form.get('purpose'));
+
+      for (const file of files) {
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '-');
+        const path = `${userId}/${crypto.randomUUID()}-${safeName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('property-images')
+          .upload(path, file, {
+            upsert: false,
+            contentType: file.type,
+          });
+
+        if (uploadError) throw uploadError;
+
+        uploadedPaths.push(path);
+      }
+
+      const { error: insertError } = await supabase
+        .from('properties')
+        .insert({
+          owner_id: userId,
+          title: String(form.get('title')).trim(),
+          description: String(form.get('description')).trim(),
+          location: String(form.get('location')).trim(),
+          city: 'Pune',
+          price: Number(form.get('price')),
+          price_period: purpose === 'Rent' ? 'month' : 'total',
+          property_type: String(form.get('property_type')),
+          purpose,
+          bedrooms: form.get('bedrooms')
+            ? Number(form.get('bedrooms'))
+            : null,
+          area_sqft: form.get('area_sqft')
+            ? Number(form.get('area_sqft'))
+            : null,
+          images: uploadedPaths,
+          status: 'pending',
+        });
+
+      if (insertError) throw insertError;
+
+      formElement.reset();
+      setFiles([]);
+      setMessage(
+        'Property submitted successfully! It is waiting for approval.'
+      );
+    } catch (err) {
+      if (uploadedPaths.length > 0) {
+        await supabase.storage
+          .from('property-images')
+          .remove(uploadedPaths);
+      }
+
+      setError(
+        err instanceof Error
+          ? err.message
+          : 'Something went wrong. Please try again.'
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (checking) {
+    return (
+      <main className="inner-page container">
+        <p>Checking your login...</p>
+      </main>
+    );
+  }
+
+  return (
+    <main className="inner-page container">
+      <p className="eyebrow">PROPERTY OWNER</p>
+
+      <h1 className="page-heading">List your property.</h1>
+
+      <p className="section-sub">
+        Add accurate property details and upload photos or videos.
+        Your listing will be reviewed before it appears publicly.
+      </p>
+
+      <form className="form-card" onSubmit={submitProperty}>
+        <div className="form-grid">
+
+          <label className="form-field">
+            Listing title
+            <input
+              name="title"
+              required
+              placeholder="e.g. Spacious 2 BHK in Narhe"
+            />
+          </label>
+
+          <label className="form-field">
+            Looking to
+            <select name="purpose" required>
+              <option value="Buy">Sell property</option>
+              <option value="Rent">Rent out property</option>
+            </select>
+          </label>
+
+          <label className="form-field">
+            Property category
+            <select name="property_type" required>
+              <option>Room</option>
+              <option>1RK</option>
+              <option>1 BHK</option>
+              <option>2 BHK</option>
+              <option>3 BHK+</option>
+              <option>Plot / Land</option>
+              <option>Shop / Commercial</option>
+              <option>Office</option>
+              <option>House / Villa</option>
+            </select>
+          </label>
+
+          <label className="form-field">
+            Price (₹)
+            <input
+              name="price"
+              type="number"
+              min="1"
+              required
+              placeholder="e.g. 15000"
+            />
+          </label>
+
+          <label className="form-field">
+            Location
+            <input
+              name="location"
+              required
+              placeholder="e.g. Narhe, Pune"
+            />
+          </label>
+
+          <label className="form-field">
+            Area (sq. ft.)
+            <input
+              name="area_sqft"
+              type="number"
+              min="1"
+              placeholder="e.g. 950"
+            />
+          </label>
+
+          <label className="form-field">
+            Bedrooms
+            <input
+              name="bedrooms"
+              type="number"
+              min="0"
+              max="20"
+              placeholder="e.g. 2"
+            />
+          </label>
+
+          <label className="form-field full">
+            Description
+            <textarea
+              name="description"
+              placeholder="Add property details, amenities and nearby landmarks."
+            />
+          </label>
+
+          <label className="form-field full">
+            Property photos / videos
+            <input
+              id="property-media"
+              type="file"
+              accept="image/*,video/*"
+              multiple
+              onChange={selectFiles}
+            />
+
+            <small>
+              Maximum 8 files. Photos up to 10 MB and videos up to 50 MB each.
+            </small>
+
+            {files.length > 0 && (
+              <small>
+                {files.length} file(s) selected:{' '}
+                {files.map((file) => file.name).join(', ')}
+              </small>
+            )}
+          </label>
+
+        </div>
+
+        {error && (
+          <p className="notice" role="alert">{error}</p>
+        )}
+
+        {message && (
+          <p className="notice" role="status">{message}</p>
+        )}
+
+        <button
+          className="form-submit"
+          type="submit"
+          disabled={busy}
+        >
+          {busy ? 'Uploading and submitting...' : 'Submit property for approval'}
+        </button>
+      </form>
+    </main>
+  );
+}
