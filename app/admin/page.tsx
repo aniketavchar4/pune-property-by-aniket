@@ -156,11 +156,12 @@ export default function AdminPage() {
           .remove(uploadedPaths);
       }
 
-      setError(
-        err instanceof Error
-          ? err.message
-          : 'Something went wrong. Please try again.'
-      );
+    const details =
+  err && typeof err === 'object' && 'message' in err
+    ? String(err.message)
+    : String(err);
+
+setError(details);
     } finally {
       setBusy(false);
     }
